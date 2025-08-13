@@ -1,4 +1,4 @@
-# Trigger Dell Debloater (PowerShell)
+# Dell Debloater
 
 Remediates Dell Windows endpoints by removing preinstalled OEM applications and services that are not required for enterprise use.  
 The script is **Dell-aware** (exits on non-Dell devices), logs to `C:\ProgramData\Debloat\Debloat.log`, and is suitable for Intune Remediations or Win32 app deployment.
