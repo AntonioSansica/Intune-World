@@ -20,7 +20,7 @@ The script is **Dell-aware** (exits on non-Dell devices), logs to `C:\ProgramDat
 
 ## Files
 
-- `Trigger_DellDebloater.ps1` – main script
+- `[ALL] Trigger_DellDebloater.ps1` – main script
 - `C:\ProgramData\Debloat\Debloat.log` – run log (auto-created)
 
 ---

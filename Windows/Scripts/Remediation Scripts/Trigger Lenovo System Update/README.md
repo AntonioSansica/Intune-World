@@ -23,7 +23,7 @@ Designed for Intune Remediations or Win32 app deployments on Lenovo Windows endp
 
 ## Files
 
-- `Trigger_LenovoSystemUpdate.ps1` – main script  
+- `[ALL] Trigger_LenovoSystemUpdate.ps1` – main script  
 - Lenovo System Update internal logs (not modified by script):
 - `%ProgramData%\Lenovo\SystemUpdate\logs`
 - `%LocalAppData%\Lenovo\SystemUpdate\logs`

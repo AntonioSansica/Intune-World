@@ -23,7 +23,7 @@ Designed for Intune Remediations or Win32 app deployments on Dell Windows endpoi
 
 ## Files
 
-- `Trigger_DellCommandUpdate.ps1` – main script  
+- `[ALL] Trigger_DellCommandUpdate.ps1` – main script  
 - `C:\Windows\Temp\dcu-cli.log` – DCU scan log
 
 ---
