@@ -15,7 +15,7 @@ if (-not $exePath) {
 }
 
 # Prepare arguments for silent scan and install
-$scanArgs    = '/scan','-silent', '-OutputLog=C:\temp\dell.log'
+$scanArgs    = '/scan','-silent', '-OutputLog=C:\Windows\Temp\dcu-cli.log'
 $applyArgs   = '/applyUpdates','-silent','-reboot=disable','-forceUpdate=enable'
 
 try {
@@ -25,11 +25,10 @@ try {
         -NoNewWindow `
         -ErrorAction Stop `
         -Wait
+    
+    Write-Host "Dell Command | Update scan completed successfully."
 
-    # Small delay to ensure scan starts before applying updates
-    Start-Sleep -Seconds 10
-
-    # Launch the apply-updates asynchronously (no -Wait, hidden window)
+    # Launch the apply-updates (hidden window)
     Start-Process -FilePath $exePath `
         -ArgumentList $applyArgs `
         -NoNewWindow `
