@@ -1,0 +1,20 @@
+{
+    "policies": [
+        {
+            "key": "HideFirstRunExperience",
+            "value": "true"
+        },
+        {
+            "key": "BrowserSignin",
+            "value": "2"
+        },
+        {
+            "key": "ForceSync",
+            "value": "true"
+        },
+        {
+            "key": "NonRemovableProfileEnabled",
+            "value": "true"
+        }
+    ]
+}
