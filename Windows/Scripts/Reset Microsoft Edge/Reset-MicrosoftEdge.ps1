@@ -1,125 +1,146 @@
 <#
 .SYNOPSIS
-    Intune Remediation Script - Reset Microsoft Edge Cloud Policies
+    Intune Remediation — Resets Microsoft Edge cloud policy cache.
 
 .DESCRIPTION
-    Targets cloud-delivered Edge policies (Source = "Cloud" in edge://policy).
-    These are NOT registry-based — they are cached locally by the Edge browser
-    after being fetched from the Microsoft Edge management service (cloud policy).
-
-    This script clears the local cloud policy cache so Edge fetches a fresh copy,
-    and also clears any registry remnants for completeness.
+    Kills Edge processes, removes the local cloud policy cache for every user
+    profile, and clears registry-based Edge policy keys. Edge will re-fetch
+    a fresh policy set on next launch.
 
 .NOTES
-    Version     : 2.0
-    Exit Codes  : 0 = Success | 1 = Failure
+    Exit 0 = success | Exit 1 = failure
+    Log: C:\ProgramData\Microsoft\IntuneManagementExtension\Logs\
 #>
 
-$ErrorCount = 0
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'SilentlyContinue'
 
-Write-Output "=== Edge Cloud Policy Remediation Started: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') ==="
+# ── Logging ───────────────────────────────────────────────────────────────────
+$LogDir  = 'C:\ProgramData\Microsoft\IntuneManagementExtension\Logs'
+$LogFile = Join-Path $LogDir "Reset-EdgeCloudPolicies_$(Get-Date -Format 'yyyyMMdd_HHmmss').log"
 
-# ── 1. Kill Edge processes so cache files are not locked ───────────────────────
-Write-Output "`n[STEP 1] Stopping Microsoft Edge processes..."
-try {
-    $EdgeProcesses = Get-Process -Name "msedge", "msedgewebview2" -ErrorAction SilentlyContinue
-    if ($EdgeProcesses) {
-        $EdgeProcesses | Stop-Process -Force -ErrorAction Stop
-        Write-Output "  [OK] Edge processes stopped."
-        Start-Sleep -Seconds 3
-    } else {
-        Write-Output "  [SKIP] No Edge processes running."
-    }
-} catch {
-    Write-Output "  [WARN] Could not stop Edge: $($_.Exception.Message)"
+if (-not (Test-Path $LogDir)) {
+    New-Item -ItemType Directory -Path $LogDir -Force | Out-Null
 }
 
-# ── 2. Clear cloud policy cache (per-user profile) ────────────────────────────
-# Edge stores cloud policy in each user's AppData. Since remediation runs as
-# SYSTEM, we enumerate all user profiles and clear for each one.
-Write-Output "`n[STEP 2] Clearing Edge cloud policy cache for all user profiles..."
-
-$CloudPolicyCachePaths = @(
-    "Policy",            # Main cloud policy cache folder
-    "EdgeCopilot"        # Copilot-related cloud settings
-)
-
-$UserProfilesRoot = "C:\Users"
-$UserProfiles = Get-ChildItem -Path $UserProfilesRoot -Directory -ErrorAction SilentlyContinue
-
-foreach ($u in $UserProfiles) {
-    $EdgeDataPath = Join-Path $u.FullName "AppData\Local\Microsoft\Edge\User Data"
-
-    if (-not (Test-Path $EdgeDataPath)) { continue }
-
-    # Cloud policy cache lives under each Edge profile subdirectory
-    $EdgeProfiles = Get-ChildItem -Path $EdgeDataPath -Directory -ErrorAction SilentlyContinue |
-        Where-Object { $_.Name -match "^Default$|^Profile \d+$" }
-
-    foreach ($EdgeProfile in $EdgeProfiles) {
-        foreach ($CacheFolder in $CloudPolicyCachePaths) {
-            $CachePath = Join-Path $EdgeProfile.FullName $CacheFolder
-            if (Test-Path $CachePath) {
-                try {
-                    Remove-Item -Path $CachePath -Recurse -Force -ErrorAction Stop
-                    Write-Output "  [REMOVED] $CachePath"
-                } catch {
-                    Write-Output "  [ERROR]   $CachePath — $($_.Exception.Message)"
-                    $ErrorCount++
-                }
-            }
-        }
-
-        # Also remove the cloud policy token/metadata files directly in the profile root
-        $CloudPolicyFiles = @(
-            "CloudPolicyDMToken",
-            "CloudPolicyClientId",
-            "Policy Fetch Timestamps"
-        )
-        foreach ($File in $CloudPolicyFiles) {
-            $FilePath = Join-Path $EdgeProfile.FullName $File
-            if (Test-Path $FilePath) {
-                try {
-                    Remove-Item -Path $FilePath -Force -ErrorAction Stop
-                    Write-Output "  [REMOVED] $FilePath"
-                } catch {
-                    Write-Output "  [ERROR]   $FilePath — $($_.Exception.Message)"
-                    $ErrorCount++
-                }
-            }
-        }
-    }
+function Write-Log {
+    param(
+        [string]$Message,
+        [ValidateSet('INFO', 'WARN', 'ERROR')] [string]$Level = 'INFO'
+    )
+    $entry = '[{0}] [{1}] {2}' -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $Level, $Message
+    $entry | Out-File -FilePath $LogFile -Append -Encoding utf8
+    Write-Output $entry
 }
 
-# ── 3. Clear registry-based policies as well (belt-and-suspenders) ────────────
-Write-Output "`n[STEP 3] Clearing registry-based Edge policy keys..."
+$script:anyFailure = $false
+function Set-Failure { $script:anyFailure = $true }
 
-$RegistryPaths = @(
-    "HKLM:\SOFTWARE\Policies\Microsoft\Edge",
-    "HKLM:\SOFTWARE\Policies\Microsoft\Edge\Recommended",
-    "HKCU:\SOFTWARE\Policies\Microsoft\Edge",
-    "HKCU:\SOFTWARE\Policies\Microsoft\Edge\Recommended",
-    "HKLM:\SOFTWARE\WOW6432Node\Policies\Microsoft\Edge"
-)
+Write-Log "=== Reset-EdgeCloudPolicies remediation started ==="
+Write-Log "Running as : $([System.Security.Principal.WindowsIdentity]::GetCurrent().Name)"
+Write-Log "Log file   : $LogFile"
 
-foreach ($Path in $RegistryPaths) {
-    if (Test-Path $Path) {
+# ── 1. Kill Edge processes ────────────────────────────────────────────────────
+$edgeProcesses = @('msedge', 'msedgewebview2')
+
+foreach ($proc in $edgeProcesses) {
+    $running = Get-Process -Name $proc -ErrorAction SilentlyContinue
+    if ($running) {
         try {
-            Remove-Item -Path $Path -Recurse -Force -ErrorAction Stop
-            Write-Output "  [REMOVED] $Path"
+            $running | Stop-Process -Force -ErrorAction Stop
+            Write-Log "Terminated process: $proc (PID: $($running.Id -join ', '))"
         } catch {
-            Write-Output "  [ERROR]   $Path — $($_.Exception.Message)"
-            $ErrorCount++
+            Write-Log "Failed to terminate process '$proc': $_" -Level WARN
         }
     } else {
-        Write-Output "  [SKIP]    Not found: $Path"
+        Write-Log "Process not running, skipping: $proc"
     }
 }
 
-# ── Summary ───────────────────────────────────────────────────────────────────
-Write-Output "`n=== Summary ==="
-Write-Output "  Errors encountered : $ErrorCount"
-Write-Output "  Next step          : Edge will re-fetch cloud policies on next launch"
-Write-Output "=== Completed: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') ==="
+Start-Sleep -Seconds 3
 
-if ($ErrorCount -gt 0) { exit 1 } else { exit 0 }
+# ── 2. Clear cloud policy cache for all user profiles ────────────────────────
+# Cloud policy cache lives under each Edge profile subdirectory inside AppData.
+# Running as SYSTEM means we must enumerate C:\Users manually.
+$cacheFolders = @('Policy', 'EdgeCopilot')
+$cacheFiles   = @('CloudPolicyDMToken', 'CloudPolicyClientId', 'Policy Fetch Timestamps')
+
+$userProfiles = Get-ChildItem -Path 'C:\Users' -Directory -ErrorAction SilentlyContinue
+
+foreach ($userProfile in $userProfiles) {
+    $edgeDataPath = Join-Path $userProfile.FullName 'AppData\Local\Microsoft\Edge\User Data'
+
+    if (-not (Test-Path $edgeDataPath)) {
+        Write-Log "Edge User Data not found, skipping: $($userProfile.FullName)"
+        continue
+    }
+
+    $edgeProfiles = Get-ChildItem -Path $edgeDataPath -Directory -ErrorAction SilentlyContinue |
+        Where-Object { $_.Name -match '^Default$|^Profile \d+$' }
+
+    foreach ($edgeProfile in $edgeProfiles) {
+        Write-Log "--- Processing Edge profile: $($edgeProfile.FullName)"
+
+        foreach ($folder in $cacheFolders) {
+            $folderPath = Join-Path $edgeProfile.FullName $folder
+            if (Test-Path $folderPath) {
+                try {
+                    Remove-Item -Path $folderPath -Recurse -Force -ErrorAction Stop
+                    Write-Log "Removed folder: $folderPath"
+                } catch {
+                    Write-Log "Failed to remove folder '$folderPath': $_" -Level ERROR
+                    Set-Failure
+                }
+            } else {
+                Write-Log "Folder not present, skipping: $folderPath"
+            }
+        }
+
+        foreach ($file in $cacheFiles) {
+            $filePath = Join-Path $edgeProfile.FullName $file
+            if (Test-Path $filePath) {
+                try {
+                    Remove-Item -Path $filePath -Force -ErrorAction Stop
+                    Write-Log "Removed file: $filePath"
+                } catch {
+                    Write-Log "Failed to remove file '$filePath': $_" -Level ERROR
+                    Set-Failure
+                }
+            } else {
+                Write-Log "File not present, skipping: $filePath"
+            }
+        }
+    }
+}
+
+# ── 3. Clear registry-based Edge policy keys ──────────────────────────────────
+$registryPaths = @(
+    'HKLM:\SOFTWARE\Policies\Microsoft\Edge',
+    'HKLM:\SOFTWARE\Policies\Microsoft\Edge\Recommended',
+    'HKLM:\SOFTWARE\WOW6432Node\Policies\Microsoft\Edge',
+    'HKCU:\SOFTWARE\Policies\Microsoft\Edge',
+    'HKCU:\SOFTWARE\Policies\Microsoft\Edge\Recommended'
+)
+
+foreach ($path in $registryPaths) {
+    if (Test-Path $path) {
+        try {
+            Remove-Item -Path $path -Recurse -Force -ErrorAction Stop
+            Write-Log "Removed registry key: $path"
+        } catch {
+            Write-Log "Failed to remove registry key '$path': $_" -Level ERROR
+            Set-Failure
+        }
+    } else {
+        Write-Log "Registry key not present, skipping: $path"
+    }
+}
+
+# ── Done ──────────────────────────────────────────────────────────────────────
+if ($script:anyFailure) {
+    Write-Log "=== Remediation completed WITH ERRORS - review log above ===" -Level WARN
+    exit 1
+} else {
+    Write-Log "=== Remediation completed successfully ==="
+    exit 0
+}

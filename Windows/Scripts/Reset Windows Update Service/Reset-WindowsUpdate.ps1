@@ -1,28 +1,15 @@
 <#
 .SYNOPSIS
-    Resets the Windows Update stack on a Windows 11 device with a broken Windows Update.
-
+    Intune Remediation — Resets the Windows Update stack.
+ 
 .DESCRIPTION
-    Designed to run as an Intune Remediation script (SYSTEM context, no interactive
-    console). Validates the OS is Windows 11 before proceeding, then stops WU-related
-    services, removes stale GPO and MDM policy registry keys, renames the
-    SoftwareDistribution and Catroot2 cache folders, re-registers core Update DLLs,
-    restarts services, and triggers an immediate WU scan via UsoClient.
-
-    Exit codes (consumed by Intune):
-        0  – Remediation completed successfully.
-        1  – One or more steps failed; see log for details.
-
+    Stops WU-related services, removes stale GPO and MDM policy registry keys,
+    renames SoftwareDistribution and Catroot2 cache folders, re-registers core
+    Update DLLs, restarts services, and triggers an immediate scan via UsoClient.
+ 
 .NOTES
-    - Targets Windows 11 only.
-    - Do NOT add #Requires -RunAsAdministrator — Intune runs as SYSTEM and that
-      pragma causes an immediate abort in a non-interactive session.
-    - Do NOT restart IntuneManagementExtension or its scheduled tasks from within
-      a remediation script — doing so kills the running remediation job.
-    - wuauclt.exe and legacy scripting DLLs are intentionally excluded — they are
-      not used by the Windows Update stack on Windows 11.
-    - Log is written to C:\ProgramData\Microsoft\IntuneManagementExtension\Logs\
-      so it is collected automatically by Intune's "Collect diagnostics" feature.
+    Exit 0 = success | Exit 1 = failure
+    Log: C:\ProgramData\Microsoft\IntuneManagementExtension\Logs\
 #>
 
 Set-StrictMode -Version Latest
