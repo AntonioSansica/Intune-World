@@ -14,6 +14,9 @@
 # Log: /opt/Intune/Scripts/Invoke-MacOSUpdate.log
 ##############################################################
 
+# Exit immediately if a command exits with a non-zero status.
+set -euo pipefail
+
 # ── Logging ───────────────────────────────────────────────
 scriptName="Invoke-MacOSUpdate"
 logDir="/opt/Intune/Scripts"
@@ -37,8 +40,15 @@ fi
 
 # ── Fetch available updates ───────────────────────────────
 log "INFO" "Checking for available macOS updates..."
+# Capture output and check exit status for better reliability
 availableUpdates=$(softwareupdate --list 2>&1)
-log "INFO" "$availableUpdates"
+listExit=$?
+
+if [[ $listExit -ne 0 ]]; then
+    log "ERROR" "Failed to list available updates. softwareupdate returned exit code $listExit."
+    log "DEBUG" "Output: $availableUpdates"
+    exit 1
+fi
 
 # Check if there are any recommended updates.
 if echo "$availableUpdates" | grep -q "No new software available"; then
@@ -51,6 +61,7 @@ fi
 # --no-restart           prevents automatic reboot after install
 # --agree-to-license     suppresses the license prompt in non-interactive context
 log "INFO" "Installing available updates (reboot suppressed)..."
+# Capture output and check exit status
 installResult=$(softwareupdate --install --all --no-restart --agree-to-license 2>&1)
 installExit=$?
 
@@ -58,8 +69,9 @@ log "INFO" "$installResult"
 
 if [[ $installExit -eq 0 ]]; then
     log "INFO" "Updates installed successfully. A restart may be required."
+    exit 0
 else
-    log "ERROR" "softwareupdate exited with code $installExit."
+    log "ERROR" "softwareupdate exited with code $installExit during installation."
     exit 1
 fi
 
