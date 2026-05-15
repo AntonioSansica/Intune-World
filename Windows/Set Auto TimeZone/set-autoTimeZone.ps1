@@ -52,6 +52,8 @@ function Set-Failure { $script:anyFailure = $true }
 
 Write-Log "=== Enable-LocationAndAutoTimezone started ==="
 Write-Log "Running as : $([System.Security.Principal.WindowsIdentity]::GetCurrent().Name)"
+Write-Log "PowerShell : $($PSVersionTable.PSVersion)"
+Write-Log "OS         : $((Get-CimInstance Win32_OperatingSystem).Caption)"
 Write-Log "Log file   : $LogFile"
 
 # ── Helper — set a registry value, creating the key path if required ──────────
@@ -153,7 +155,7 @@ try {
 
 # ── Done ──────────────────────────────────────────────────────────────────────
 if ($script:anyFailure) {
-    Write-Log "=== Script completed WITH ERRORS - review log above ===" -Level WARN
+    Write-Log "=== Enable-LocationAndAutoTimezone completed WITH ERRORS - review log above ===" -Level WARN
     exit 1
 } else {
     Write-Log "Location Services enabled and Auto Timezone Updater configured successfully."

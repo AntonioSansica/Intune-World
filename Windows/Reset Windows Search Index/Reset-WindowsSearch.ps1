@@ -38,6 +38,8 @@ function Set-Failure { $script:anyFailure = $true }
 
 Write-Log "=== Reset-WindowsSearch remediation started ==="
 Write-Log "Running as : $([System.Security.Principal.WindowsIdentity]::GetCurrent().Name)"
+Write-Log "PowerShell : $($PSVersionTable.PSVersion)"
+Write-Log "OS         : $((Get-CimInstance Win32_OperatingSystem).Caption)"
 Write-Log "Log file   : $LogFile"
 
 # ── 1. Stop Windows Search service ───────────────────────────────────────────
